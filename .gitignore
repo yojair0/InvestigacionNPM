@@ -1,0 +1,12 @@
+.venv/
+backups/
+__pycache__/
+*.pyc
+
+# Generated outputs
+checkpoint_top_10k_pesados.json
+top_10k_pesados.csv
+top_5000_popular.csv
+grafo_final_ucn.json
+reporte_metricas_ucn.csv
+shortlist_top50.csv
