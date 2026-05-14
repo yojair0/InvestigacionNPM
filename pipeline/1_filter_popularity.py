@@ -20,8 +20,8 @@ except ImportError as exc:
         "Dependencia faltante: requests. Instala con: pip install requests"
     ) from exc
 
-INPUT_CSV = Path("top_10k_pesados.csv")
-OUTPUT_CSV = Path("top_5000_popular.csv")
+INPUT_CSV = Path("data/raw/top_10k_by_size.csv")
+OUTPUT_CSV = Path("data/raw/top_5k_by_downloads.csv")
 API_TEMPLATE = "https://api.npmjs.org/downloads/point/last-week/{}"
 MAX_WORKERS = 10
 MAX_RETRIES = 6
@@ -69,7 +69,7 @@ def read_package_names(csv_path: Path) -> List[str]:
     if not csv_path.exists():
         raise FileNotFoundError(
             f"No se encontro el archivo de entrada: {csv_path}. "
-            "Generalo primero con 0_generador_top_10k_pesados.py"
+            "Generalo primero con 0_generate_top10k.py"
         )
 
     package_names: List[str] = []
@@ -196,6 +196,7 @@ def save_top_packages(
     )
     top_packages = sorted_stats[:top_n]
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=["package_name", "downloads"])
         writer.writeheader()

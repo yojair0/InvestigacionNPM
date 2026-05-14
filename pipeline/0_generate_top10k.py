@@ -34,8 +34,8 @@ except ImportError as exc:
 REPLICATE_ALL_DOCS_URL = "https://replicate.npmjs.com/_all_docs"
 PACKAGE_LATEST_URL_TEMPLATE = "https://registry.npmjs.org/{}/latest"
 
-DEFAULT_OUTPUT_CSV = Path("top_10k_pesados.csv")
-DEFAULT_CHECKPOINT = Path("checkpoint_top_10k_pesados.json")
+DEFAULT_OUTPUT_CSV = Path("data/raw/top_10k_by_size.csv")
+DEFAULT_CHECKPOINT = Path("data/raw/checkpoint_top10k.json")
 
 DEFAULT_TOP_N = 10_000
 DEFAULT_WORKERS = 10
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
         "--output-csv",
         type=Path,
         default=DEFAULT_OUTPUT_CSV,
-        help="Ruta del CSV de salida (default: top_10k_pesados.csv).",
+        help="Ruta del CSV de salida (default: top_10k_by_size.csv).",
     )
     parser.add_argument(
         "--checkpoint",

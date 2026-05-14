@@ -21,8 +21,8 @@ except ImportError as exc:
         "Dependencia faltante: requests. Instala con: pip install requests"
     ) from exc
 
-INPUT_CSV = Path("top_5000_popular.csv")
-OUTPUT_JSON = Path("grafo_final_ucn.json")
+INPUT_CSV = Path("data/raw/top_5k_by_downloads.csv")
+OUTPUT_JSON = Path("data/raw/dependency_graph.json")
 REGISTRY_TEMPLATE = "https://registry.npmjs.org/{}"
 MAX_WORKERS = 10
 MAX_RETRIES = 6
@@ -245,6 +245,7 @@ def build_graph(
 
 def save_graph(graph: Dict[str, Dict[str, Dict[str, str]]], output_path: Path) -> None:
     """Guarda el grafo consolidado como JSON con indentacion de 4 espacios."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as json_file:
         json.dump(graph, json_file, indent=4)
 

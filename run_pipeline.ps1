@@ -57,13 +57,13 @@ Write-Host "Python seleccionado: $pythonExe" -ForegroundColor Green
 Ensure-RequestsInstalled -PythonExe $pythonExe
 
 if ($OnlyGraph) {
-    Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("2_procesador_grafo.py")
+    Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
 }
 elseif ($OnlyFilter) {
-    Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("1_filtro_popularidad.py")
+    Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
 }
 elseif ($OnlyTop10k) {
-    $args0 = @("0_generador_top_10k_pesados.py", "--workers", "$Workers", "--page-size", "$PageSize")
+    $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
     if ($MaxPackages -gt 0) {
         $args0 += @("--max-packages", "$MaxPackages")
     }
@@ -74,7 +74,7 @@ elseif ($OnlyTop10k) {
 }
 else {
     if (-not $SkipTop10k) {
-        $args0 = @("0_generador_top_10k_pesados.py", "--workers", "$Workers", "--page-size", "$PageSize")
+        $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
         if ($MaxPackages -gt 0) {
             $args0 += @("--max-packages", "$MaxPackages")
         }
@@ -84,8 +84,8 @@ else {
         Run-Step -Name "Paso 0: Generar top 10k pesados" -PythonExe $pythonExe -ScriptArgs $args0
     }
 
-    Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("1_filtro_popularidad.py")
-    Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("2_procesador_grafo.py")
+    Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
+    Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
 }
 
 $elapsed = (Get-Date) - $startedAt

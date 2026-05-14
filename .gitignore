@@ -4,9 +4,9 @@ __pycache__/
 *.pyc
 
 # Generated outputs
-checkpoint_top_10k_pesados.json
-top_10k_pesados.csv
-top_5000_popular.csv
-grafo_final_ucn.json
-reporte_metricas_ucn.csv
-shortlist_top50.csv
+data/raw/top_10k_by_size.csv
+data/raw/top_5k_by_downloads.csv
+data/raw/dependency_graph.json
+data/raw/checkpoint_top10k.json
+data/metrics/fanin_fanout_report.csv
+data/metrics/fanin_fanout_global_report.csv
