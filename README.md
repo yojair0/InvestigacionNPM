@@ -20,7 +20,8 @@ InvestigacionNPM/
 │   ├── 1_filter_popularity.py      # Filter top 5,000 by weekly downloads
 │   ├── 2_build_graph.py            # Build dependency graph
 │   ├── 3a_calc_fanout.py           # Calculate fan-out for the 5k packages
-│   └── 3b_calc_fanin_global.py     # Calculate global fan-in scanning ~4M packages
+│   ├── 3b_calc_fanin_global.py     # Calculate global fan-in scanning ~4M packages
+│   └── 4_version_distance.py       # Calculate version distance per dependency
 ├── data/
 │   ├── raw/                        # Intermediate generated files
 │   └── metrics/                    # Final metric outputs
@@ -85,6 +86,7 @@ Test run with limited packages:
 | `dependency_graph.json` | `data/raw/` | Dependencies per package (latest version) |
 | `fanout_report.csv` | `data/metrics/` | Fan-out for all 5k packages |
 | `fanin_global_report.csv` | `data/metrics/` | Global fan-in scanning ~4M npm packages |
+| `version_distance.csv` | `data/metrics/` | Version distance per (package, dependency) pair |
 
 ## Methodology Note
 

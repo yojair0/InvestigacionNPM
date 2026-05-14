@@ -7,6 +7,7 @@ param(
     [switch]$OnlyGraph,
     [switch]$OnlyFanout,
     [switch]$OnlyFanin,
+    [switch]$OnlyVersionDistance,
     [int]$Workers = 10,
     [int]$PageSize = 300,
     [int]$MaxPackages = 0
@@ -59,7 +60,10 @@ $startedAt = Get-Date
 Write-Host "Python seleccionado: $pythonExe" -ForegroundColor Green
 Ensure-RequestsInstalled -PythonExe $pythonExe
 
-if ($OnlyFanout) {
+if ($OnlyVersionDistance) {
+    Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
+}
+elseif ($OnlyFanout) {
     Run-Step -Name "Paso 3a: Calcular fan-out" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
 }
 elseif ($OnlyFanin) {
@@ -100,6 +104,8 @@ else {
     } else {
         Write-Host "[skip] Paso 3b omitido (-SkipFanin)." -ForegroundColor Yellow
     }
+
+    Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
 }
 
 $elapsed = (Get-Date) - $startedAt

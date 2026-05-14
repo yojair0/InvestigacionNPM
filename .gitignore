@@ -12,3 +12,4 @@ data/metrics/fanout_report.csv
 data/metrics/fanin_global_report.csv
 data/raw/checkpoint_fanin_global.json
 data/metrics/fanin_fanout_global_report.csv
+data/metrics/version_distance.csv
