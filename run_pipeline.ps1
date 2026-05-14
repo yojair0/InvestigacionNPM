@@ -1,9 +1,12 @@
 param(
     [switch]$FreshStart,
     [switch]$SkipTop10k,
+    [switch]$SkipFanin,
     [switch]$OnlyTop10k,
     [switch]$OnlyFilter,
     [switch]$OnlyGraph,
+    [switch]$OnlyFanout,
+    [switch]$OnlyFanin,
     [int]$Workers = 10,
     [int]$PageSize = 300,
     [int]$MaxPackages = 0
@@ -56,7 +59,16 @@ $startedAt = Get-Date
 Write-Host "Python seleccionado: $pythonExe" -ForegroundColor Green
 Ensure-RequestsInstalled -PythonExe $pythonExe
 
-if ($OnlyGraph) {
+if ($OnlyFanout) {
+    Run-Step -Name "Paso 3a: Calcular fan-out" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
+}
+elseif ($OnlyFanin) {
+    $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$Workers", "--page-size", "$PageSize")
+    if ($MaxPackages -gt 0) { $args3b += @("--max-packages", "$MaxPackages") }
+    if ($FreshStart) { $args3b += "--fresh-start" }
+    Run-Step -Name "Paso 3b: Calcular fan-in global" -PythonExe $pythonExe -ScriptArgs $args3b
+}
+elseif ($OnlyGraph) {
     Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
 }
 elseif ($OnlyFilter) {
@@ -64,28 +76,30 @@ elseif ($OnlyFilter) {
 }
 elseif ($OnlyTop10k) {
     $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
-    if ($MaxPackages -gt 0) {
-        $args0 += @("--max-packages", "$MaxPackages")
-    }
-    if ($FreshStart) {
-        $args0 += "--fresh-start"
-    }
+    if ($MaxPackages -gt 0) { $args0 += @("--max-packages", "$MaxPackages") }
+    if ($FreshStart) { $args0 += "--fresh-start" }
     Run-Step -Name "Paso 0: Generar top 10k pesados" -PythonExe $pythonExe -ScriptArgs $args0
 }
 else {
     if (-not $SkipTop10k) {
         $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
-        if ($MaxPackages -gt 0) {
-            $args0 += @("--max-packages", "$MaxPackages")
-        }
-        if ($FreshStart) {
-            $args0 += "--fresh-start"
-        }
+        if ($MaxPackages -gt 0) { $args0 += @("--max-packages", "$MaxPackages") }
+        if ($FreshStart) { $args0 += "--fresh-start" }
         Run-Step -Name "Paso 0: Generar top 10k pesados" -PythonExe $pythonExe -ScriptArgs $args0
     }
 
     Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
     Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
+    Run-Step -Name "Paso 3a: Calcular fan-out" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
+
+    if (-not $SkipFanin) {
+        $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$Workers", "--page-size", "$PageSize")
+        if ($MaxPackages -gt 0) { $args3b += @("--max-packages", "$MaxPackages") }
+        if ($FreshStart) { $args3b += "--fresh-start" }
+        Run-Step -Name "Paso 3b: Calcular fan-in global" -PythonExe $pythonExe -ScriptArgs $args3b
+    } else {
+        Write-Host "[skip] Paso 3b omitido (-SkipFanin)." -ForegroundColor Yellow
+    }
 }
 
 $elapsed = (Get-Date) - $startedAt

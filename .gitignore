@@ -8,5 +8,7 @@ data/raw/top_10k_by_size.csv
 data/raw/top_5k_by_downloads.csv
 data/raw/dependency_graph.json
 data/raw/checkpoint_top10k.json
-data/metrics/fanin_fanout_report.csv
+data/metrics/fanout_report.csv
+data/metrics/fanin_global_report.csv
+data/raw/checkpoint_fanin_global.json
 data/metrics/fanin_fanout_global_report.csv
