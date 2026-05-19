@@ -210,15 +210,18 @@ def fetch_package_deps(package_name: str) -> Tuple[str, Set[str], Set[str]]:
             if status == 429 or 500 <= status < 600:
                 wait = compute_backoff(attempt, parse_retry_after(
                     response.headers.get("Retry-After")))
+                print(f"[retry deps] {package_name} | HTTP {status} | intento {attempt} | espera {wait:.1f}s")
                 time.sleep(wait)
                 continue
 
             return package_name, set(), set()
 
-        except Exception:
+        except Exception as exc:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return package_name, set(), set()
-            time.sleep(compute_backoff(attempt))
+            wait = compute_backoff(attempt)
+            print(f"[retry deps] {package_name} | error de red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            time.sleep(wait)
 
     return package_name, set(), set()
 
@@ -285,6 +288,7 @@ def main() -> None:
                     page_ids = page_ids[:args.max_packages - processed]
 
                 page_number += 1
+                print(f"Procesando página {page_number} ({len(page_ids)} paquetes) | Total procesados hasta ahora: {processed:,}")
 
                 futures = {
                     executor.submit(fetch_package_deps, pkg_id): pkg_id
@@ -306,6 +310,8 @@ def main() -> None:
                             counters_dev[dep] = counters_dev.get(dep, 0) + 1
 
                     processed += 1
+                    if processed % 50 == 0:
+                        print(f"  -> {processed:,} paquetes procesados...")
                     if processed % DEFAULT_PROGRESS_EVERY == 0:
                         print(f"Progreso: {processed:,} paquetes escaneados "
                               f"(pagina {page_number})")

@@ -35,7 +35,7 @@ REGISTRY_TEMPLATE = "https://registry.npmjs.org/{}/latest"
 DEFAULT_INPUT_JSON = Path("data/raw/dependency_graph.json")
 DEFAULT_OUTPUT_CSV = Path("data/metrics/version_distance.csv")
 
-DEFAULT_WORKERS = 20
+DEFAULT_WORKERS = 10
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_REQUEST_TIMEOUT = 20
 
@@ -122,15 +122,19 @@ def fetch_latest_version(dep_name: str) -> Tuple[str, Optional[str]]:
                 return dep_name, None
 
             if status == 429 or 500 <= status < 600:
-                time.sleep(compute_backoff(attempt))
+                wait = compute_backoff(attempt)
+                print(f"[retry] {dep_name} | HTTP {status} | intento {attempt} | espera {wait:.1f}s")
+                time.sleep(wait)
                 continue
 
             return dep_name, None
 
-        except Exception:
+        except Exception as exc:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return dep_name, None
-            time.sleep(compute_backoff(attempt))
+            wait = compute_backoff(attempt)
+            print(f"[retry] {dep_name} | error de red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            time.sleep(wait)
 
     return dep_name, None
 
@@ -230,8 +234,8 @@ def main() -> None:
             dep_name, latest = future.result()
             latest_cache[dep_name] = latest
             completed += 1
-            if completed % 1000 == 0 or completed == total:
-                print(f"Progreso: {completed}/{total} dependencias consultadas")
+            if completed % 100 == 0 or completed == total:
+                print(f"Progreso: {completed}/{total} dependencias consultadas...")
 
     print(f"Cache de versiones completada. Calculando distancias...")
 
