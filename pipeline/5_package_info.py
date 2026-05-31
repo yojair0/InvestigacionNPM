@@ -43,7 +43,7 @@ DEFAULT_CHECKPOINT = Path("data/raw/checkpoint_package_info.json")
 DEFAULT_WORKERS = 10
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_REQUEST_TIMEOUT = 30
-DEFAULT_CHECKPOINT_EVERY = 100
+DEFAULT_CHECKPOINT_EVERY = 20
 
 _thread_local = threading.local()
 
@@ -139,16 +139,19 @@ def fetch_tarball_stats(tarball_url: str) -> int:
                     return 0
 
             if response.status_code == 429 or 500 <= response.status_code < 600:
-                time.sleep(compute_backoff(attempt, parse_retry_after(
-                    response.headers.get("Retry-After"))))
+                wait = compute_backoff(attempt, parse_retry_after(response.headers.get("Retry-After")))
+                print(f"[retry tarball] HTTP {response.status_code} | intento {attempt} | espera {wait:.1f}s")
+                time.sleep(wait)
                 continue
 
             return 0
 
-        except Exception:
+        except Exception as exc:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return 0
-            time.sleep(compute_backoff(attempt))
+            wait = compute_backoff(attempt)
+            print(f"[retry tarball] error red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            time.sleep(wait)
 
     return 0
 
@@ -183,8 +186,6 @@ def fetch_package_info(package_name: str) -> Optional[Dict]:
                     "size_bytes": dist.get("unpackedSize", 0),
                     "file_count": dist.get("fileCount", 0),
                     "nonempty_file_count": nonempty,
-                    "dep_count": len(deps),
-                    "dev_dep_count": len(dev_deps),
                     "dependencies": json.dumps(deps),
                     "dev_dependencies": json.dumps(dev_deps),
                 }
@@ -193,16 +194,19 @@ def fetch_package_info(package_name: str) -> Optional[Dict]:
                 return None
 
             if status == 429 or 500 <= status < 600:
-                time.sleep(compute_backoff(attempt, parse_retry_after(
-                    response.headers.get("Retry-After"))))
+                wait = compute_backoff(attempt, parse_retry_after(response.headers.get("Retry-After")))
+                print(f"[retry info] {package_name} | HTTP {status} | intento {attempt} | espera {wait:.1f}s")
+                time.sleep(wait)
                 continue
 
             return None
 
-        except Exception:
+        except Exception as exc:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return None
-            time.sleep(compute_backoff(attempt))
+            wait = compute_backoff(attempt)
+            print(f"[retry info] {package_name} | error red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            time.sleep(wait)
 
     return None
 
@@ -210,7 +214,6 @@ def fetch_package_info(package_name: str) -> Optional[Dict]:
 FIELDNAMES = [
     "package", "npm_link", "version", "size_bytes",
     "file_count", "nonempty_file_count",
-    "dep_count", "dev_dep_count",
     "dependencies", "dev_dependencies",
 ]
 
@@ -259,6 +262,7 @@ def main() -> None:
                 if row:
                     results.append(row)
                 completed.append(pkg)
+                print(f"[ok] {pkg} descargado y analizado")
 
                 if i % DEFAULT_CHECKPOINT_EVERY == 0:
                     save_checkpoint(args.checkpoint, completed, results)

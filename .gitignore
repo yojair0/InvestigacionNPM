@@ -2,16 +2,8 @@
 backups/
 __pycache__/
 *.pyc
-
-# Generated outputs
-data/raw/top_10k_by_size.csv
-data/raw/top_5k_by_downloads.csv
-data/raw/dependency_graph.json
 data/raw/checkpoint_top10k.json
-data/metrics/fanout_report.csv
-data/metrics/fanin_global_report.csv
 data/raw/checkpoint_fanin_global.json
-data/metrics/fanin_fanout_global_report.csv
-data/metrics/version_distance.csv
-data/metrics/packages_info.csv
 data/raw/checkpoint_package_info.json
+data/metrics/analysis_results.txt
+data/metrics/analyze.py

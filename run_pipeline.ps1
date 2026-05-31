@@ -61,7 +61,10 @@ $startedAt = Get-Date
 Write-Host "Python seleccionado: $pythonExe" -ForegroundColor Green
 Ensure-RequestsInstalled -PythonExe $pythonExe
 
-if ($OnlyVersionDistance) {
+if ($OnlyPackageInfo) {
+    Run-Step -Name "Paso 5: Informacionn de paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py", "--workers", "$Workers")
+}
+elseif ($OnlyVersionDistance) {
     Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
 }
 elseif ($OnlyFanout) {
