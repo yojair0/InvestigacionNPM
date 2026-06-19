@@ -2,6 +2,7 @@ param(
     [switch]$FreshStart,
     [switch]$SkipTop10k,
     [switch]$SkipFanin,
+    [switch]$SkipJTMetrics,
     [switch]$OnlyTop10k,
     [switch]$OnlyFilter,
     [switch]$OnlyGraph,
@@ -9,6 +10,7 @@ param(
     [switch]$OnlyFanin,
     [switch]$OnlyVersionDistance,
     [switch]$OnlyPackageInfo,
+    [switch]$OnlyJTMetrics,
     [int]$Workers = 10,
     [int]$PageSize = 300,
     [int]$MaxPackages = 0
@@ -21,6 +23,13 @@ function Get-PythonExe {
         return ".\.venv\Scripts\python.exe"
     }
     return "python"
+}
+
+function Get-NodeExe {
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        return "node"
+    }
+    throw "Node.js no esta disponible en PATH. Instala Node.js para ejecutar JTMetrics."
 }
 
 function Ensure-RequestsInstalled {
@@ -63,6 +72,15 @@ Ensure-RequestsInstalled -PythonExe $pythonExe
 
 if ($OnlyPackageInfo) {
     Run-Step -Name "Paso 5: Informacionn de paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py", "--workers", "$Workers")
+}
+elseif ($OnlyJTMetrics) {
+    $nodeExe = Get-NodeExe
+    Write-Host "\n=== Paso 6: JTMetrics (Node CLI) ===" -ForegroundColor Cyan
+    Write-Host "$nodeExe pipeline\6_apply_jtmetrics.js" -ForegroundColor DarkGray
+    & $nodeExe "pipeline\6_apply_jtmetrics.js"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo en paso: JTMetrics"
+    }
 }
 elseif ($OnlyVersionDistance) {
     Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
@@ -111,6 +129,18 @@ else {
 
     Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
     Run-Step -Name "Paso 5: Información de paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py")
+
+    if (-not $SkipJTMetrics) {
+        $nodeExe = Get-NodeExe
+        Write-Host "\n=== Paso 6: JTMetrics (Node CLI) ===" -ForegroundColor Cyan
+        Write-Host "$nodeExe pipeline\6_apply_jtmetrics.js" -ForegroundColor DarkGray
+        & $nodeExe "pipeline\6_apply_jtmetrics.js"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Fallo en paso: JTMetrics"
+        }
+    } else {
+        Write-Host "[skip] Paso 6 omitido (-SkipJTMetrics)." -ForegroundColor Yellow
+    }
 }
 
 $elapsed = (Get-Date) - $startedAt

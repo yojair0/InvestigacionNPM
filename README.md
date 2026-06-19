@@ -63,12 +63,21 @@ Run step by step (recommended):
 
 # Step 3b - takes several hours, supports pause/resume via checkpoint
 .\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py
+
+# Step 6 - JT Metrics over local metadata (Node.js)
+node pipeline\6_apply_jtmetrics.js
 ```
 
 Run with orchestrator (skips step 0 and 3b if already done):
 
 ```powershell
 .\run_pipeline.ps1 -SkipTop10k -SkipFanin
+```
+
+Run only JT Metrics step:
+
+```powershell
+.\run_pipeline.ps1 -OnlyJTMetrics
 ```
 
 Test run with limited packages:
@@ -89,6 +98,7 @@ Test run with limited packages:
 | `fanin_global_report.csv` | `data/metrics/` | Global fan-in scanning ~4M npm packages |
 | `version_distance.csv` | `data/metrics/` | Version distance per (package, dependency) pair |
 | `packages_info.csv` | `data/metrics/` | Detailed metadata per package (size, files, deps) |
+| `04_jtmetrics_resultados.csv` | `data/metrics/` | JT metrics adapted to package coupling (instability and centrality) |
 
 ## Methodology Note
 
