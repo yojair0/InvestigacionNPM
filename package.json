@@ -1,0 +1,12 @@
+{
+  "name": "investigacionnpm-jtmetrics-cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CLI Node.js para calcular JTMetrics sobre metadata local de paquetes NPM.",
+  "scripts": {
+    "jtmetrics": "node pipeline/6_apply_jtmetrics.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
