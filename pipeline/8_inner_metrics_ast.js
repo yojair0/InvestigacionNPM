@@ -18,8 +18,8 @@ try {
 const { buildCouplingGraph } = require('./jtmetrics/pure_metrics');
 
 const DIR_METRICS = path.join(__dirname, '..', 'data', 'metrics');
-const FILE_INPUT = path.join(DIR_METRICS, '05_final_ranking_msr.csv');
-const FILE_OUTPUT = path.join(DIR_METRICS, '06_inner_metrics_ast.csv');
+const FILE_INPUT = path.join(DIR_METRICS, 'outer_metrics.csv');
+const FILE_OUTPUT = path.join(DIR_METRICS, 'inner_metrics_ast.csv');
 
 const OUTPUT_HEADERS = [
     'package',
@@ -524,16 +524,17 @@ async function analyzeTarball(pkgName, version, ca) {
             resolve(finalizePackageMetrics(pkgName, safeVersion, ca, packageJsonText, sourceRecords));
         }
 
-        function failSoft() {
+        function failSoft(reason = 'Error desconocido') {
             if (settled) return;
             settled = true;
+            console.log(`[Aviso] Omitiendo paquete ${pkgName}: ${reason}`);
             resolve(createEmptyMetrics(pkgName, safeVersion, ca));
         }
 
         const request = https.get(url, (response) => {
             if (response.statusCode !== 200) {
                 response.resume();
-                failSoft();
+                failSoft(`HTTP ${response.statusCode} - No se pudo descargar`);
                 return;
             }
 
@@ -616,24 +617,24 @@ async function analyzeTarball(pkgName, version, ca) {
                 finishIfReady();
             });
 
-            extract.on('error', () => {
-                failSoft();
+            extract.on('error', (err) => {
+                failSoft(`Error extrayendo TAR: ${err.message}`);
             });
 
             const gunzip = zlib.createGunzip();
-            gunzip.on('error', () => {
-                failSoft();
+            gunzip.on('error', (err) => {
+                failSoft(`Error descomprimiendo GZIP: ${err.message}`);
             });
 
-            response.on('error', () => {
-                failSoft();
+            response.on('error', (err) => {
+                failSoft(`Error en la respuesta HTTP: ${err.message}`);
             });
 
             response.pipe(gunzip).pipe(extract);
         });
 
-        request.on('error', () => {
-            failSoft();
+        request.on('error', (err) => {
+            failSoft(`Error de conexión: ${err.message}`);
         });
     });
 }
@@ -676,9 +677,7 @@ async function run() {
     const targets = rows.slice(0, MAX_PACKAGES_TO_PROCESS);
     const pkgIndex = headers.indexOf('package');
     const verIndex = headers.indexOf('version');
-    const caIndex = headers.indexOf('fan_in_global') >= 0
-        ? headers.indexOf('fan_in_global')
-        : headers.indexOf('jt_afferent');
+    const caIndex = headers.indexOf('fan_in_total');
 
     if (pkgIndex < 0) {
         console.error('El CSV de entrada no contiene la columna package.');
@@ -709,9 +708,7 @@ async function run() {
             continue;
         }
 
-        if (index % 10 === 0) {
-            console.log(`Procesando ${index}/${targets.length}... (${pkgName})`);
-        }
+        console.log(`Procesando ${index}/${targets.length}... (${pkgName})`);
 
         const result = await analyzeTarball(pkgName, version, ca);
         fs.appendFileSync(FILE_OUTPUT, createCsvRow([
