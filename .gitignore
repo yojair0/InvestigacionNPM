@@ -8,3 +8,5 @@ data/raw/checkpoint_package_info.json
 data/metrics/analysis_results.txt
 data/metrics/analyze.py
 node_modules/
+tmp_extract/
+data/metrics/inner_metrics_jt.ndjson
