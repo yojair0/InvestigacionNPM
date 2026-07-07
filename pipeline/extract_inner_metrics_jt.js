@@ -9,6 +9,7 @@ const os = require('os');
 const DIR_METRICS = path.join(__dirname, '..', 'data', 'metrics');
 const FILE_INPUT = path.join(DIR_METRICS, 'packages_info.csv');
 const FILE_OUTPUT = path.join(DIR_METRICS, 'inner_metrics_jt.ndjson');
+const FILE_TRACKER = path.join(DIR_METRICS, 'inner_metrics_jt_progress.txt');
 const TMP_DIR = path.join(__dirname, '..', 'tmp_extract');
 
 const MAX_PACKAGES = 5000;
@@ -173,14 +174,10 @@ function runJtmetricsIsolated(codePath) {
 
 function getProcessedPackages() {
     const processed = new Set();
-    if (fs.existsSync(FILE_OUTPUT)) {
-        const content = fs.readFileSync(FILE_OUTPUT, 'utf-8');
-        const lines = content.split(/\r?\n/).filter(l => l.trim());
+    if (fs.existsSync(FILE_TRACKER)) {
+        const lines = fs.readFileSync(FILE_TRACKER, 'utf-8').split(/\r?\n/);
         for (const line of lines) {
-            try {
-                const obj = JSON.parse(line);
-                if (obj.package) processed.add(obj.package);
-            } catch (e) {}
+            if (line.trim()) processed.add(line.trim());
         }
     }
     return processed;
@@ -231,6 +228,7 @@ async function run() {
             };
 
             fs.appendFileSync(FILE_OUTPUT, JSON.stringify(result) + '\n', 'utf-8');
+            fs.appendFileSync(FILE_TRACKER, pkg.name + '\n', 'utf-8');
             successCount++;
             console.log(`  Done: metrics saved`);
 
@@ -245,6 +243,7 @@ async function run() {
                 metrics: null
             };
             fs.appendFileSync(FILE_OUTPUT, JSON.stringify(errorResult) + '\n', 'utf-8');
+            fs.appendFileSync(FILE_TRACKER, pkg.name + '\n', 'utf-8');
 
         } finally {
             rmDir(pkgDir);
