@@ -9,7 +9,7 @@ Pipeline to analyze the structural fragility of the NPM ecosystem by selecting p
 - Work on a closed subset of 5,000 packages.
 - Isolate the structural core of the registry to avoid distortions from the periphery.
 - Measure `fan_out` and global `fan_in` for each package.
-- Identify critical nodes for technical auditing and cascade failure risk analysis.
+- Analyze the internal and external state of the packages to explore the relationship between network metrics (Fan-In/Fan-Out) and internal code metrics (using AST-based jtmetrics).
 
 ## Project Structure
 
@@ -22,10 +22,13 @@ InvestigacionNPM/
 │   ├── 3a_calc_fanout.py           # Calculate fan-out for the 5k packages
 │   ├── 3b_calc_fanin_global.py     # Calculate global fan-in scanning ~4M packages
 │   ├── 4_version_distance.py       # Calculate version distance per dependency
-│   └── 5_package_info.py           # Collect detailed package metadata
+│   ├── 5_package_info.py           # Collect detailed package metadata
+│   ├── 6_ extract_inner_metrics_jt.js # Extract internal metrics using JTMetrics
+│   └── jt_worker.js                # Worker thread logic for parallel AST analysis
 ├── data/
 │   ├── raw/                        # Intermediate generated files
-│   └── metrics/                    # Final metric outputs
+│   ├── metrics/                    # Final metric outputs
+│   └── visualizations/             # Generated plots and visual analyses
 ├── docs/
 │   └── pipeline_documentation.md
 ├── run_pipeline.ps1                # Windows orchestrator
@@ -35,6 +38,7 @@ InvestigacionNPM/
 ## Requirements
 
 - Python 3.11+
+- Node.js (for inner metrics extraction)
 - Virtual environment in `.venv`
 - External dependency: `requests`
 
@@ -46,46 +50,13 @@ python -m venv .venv
 
 ## Running the Pipeline
 
-Run step by step (recommended):
+Run the complete pipeline using the orchestrator:
 
 ```powershell
-# Step 0 - takes several hours, supports pause/resume via checkpoint
-.\.venv\Scripts\python.exe pipeline\0_generate_top10k.py
-
-# Step 1
-.\.venv\Scripts\python.exe pipeline\1_filter_popularity.py
-
-# Step 2
-.\.venv\Scripts\python.exe pipeline\2_build_graph.py
-
-# Step 3a - fast, reads from existing graph
-.\.venv\Scripts\python.exe pipeline\3a_calc_fanout.py
-
-# Step 3b - takes several hours, supports pause/resume via checkpoint
-.\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py
-
-# Step 6 - JT Metrics over local metadata (Node.js)
-node pipeline\6_apply_jtmetrics.js
+.\run_pipeline.ps1 -FreshStart
 ```
 
-Run with orchestrator (skips step 0 and 3b if already done):
-
-```powershell
-.\run_pipeline.ps1 -SkipTop10k -SkipFanin
-```
-
-Run only JT Metrics step:
-
-```powershell
-.\run_pipeline.ps1 -OnlyJTMetrics
-```
-
-Test run with limited packages:
-
-```powershell
-.\.venv\Scripts\python.exe pipeline\0_generate_top10k.py --max-packages 1000
-.\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py --max-packages 500
-```
+For detailed execution options (running step by step, skipping steps, or testing with limited packages), please refer to the [Pipeline Documentation](docs/pipeline_documentation.md).
 
 ## Outputs
 
@@ -98,10 +69,11 @@ Test run with limited packages:
 | `fanin_global_report.csv` | `data/metrics/` | Global fan-in scanning ~4M npm packages |
 | `version_distance.csv` | `data/metrics/` | Version distance per (package, dependency) pair |
 | `packages_info.csv` | `data/metrics/` | Detailed metadata per package (size, files, deps) |
-| `04_jtmetrics_resultados.csv` | `data/metrics/` | JT metrics adapted to package coupling (instability and centrality) |
+| `inner_metrics_jt.ndjson` | `data/metrics/` | Internal structural metrics (JTMetrics) per package |
 
 ## Methodology Note
 
 - **Fan-out**: total declared dependencies (`dependencies` + `devDependencies`) of each package.
 - **Fan-in**: count of how many packages across the full npm catalog depend on each of the 5k packages, separated into `fan_in_prod` (production) and `fan_in_dev` (development).
+- **Internal Metrics (JTMetrics)**: extracted in parallel via worker threads by analyzing the Abstract Syntax Tree (AST) of the latest source code.
 - Reference version analyzed: `dist-tags.latest` per package.
