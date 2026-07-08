@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Genera el top 10.000 de paquetes NPM por tamano en bytes.
-
-Estrategia:
-1. Recorre el catalogo de paquetes via replicate.npmjs.com/_all_docs.
-2. Para cada paquete consulta registry.npmjs.org/{paquete}/latest.
-3. Extrae dist.unpackedSize (fallback: dist.size).
-4. Mantiene un heap minimo para conservar solo los N paquetes mas pesados.
-5. Guarda checkpoint periodico para reanudar sin perder avance.
-"""
+"""Generates the top 10,000 NPM packages sorted by size."""
 
 from __future__ import annotations
 
@@ -49,7 +41,6 @@ _thread_local = threading.local()
 
 
 def parse_args() -> argparse.Namespace:
-    """Parsea argumentos de linea de comandos para controlar la extraccion."""
     parser = argparse.ArgumentParser(
         description=(
             "Genera top_10k_pesados.csv recorriendo paquetes NPM y midiendo tamano por bytes."
@@ -106,7 +97,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_thread_session() -> requests.Session:
-    """Crea o reutiliza una sesion HTTP por hilo para mejorar rendimiento."""
     if not hasattr(_thread_local, "session"):
         session = requests.Session()
         session.headers.update(
@@ -120,7 +110,6 @@ def get_thread_session() -> requests.Session:
 
 
 def parse_retry_after(retry_after_value: Optional[str]) -> Optional[float]:
-    """Convierte la cabecera Retry-After a segundos, cuando es valida."""
     if not retry_after_value:
         return None
     try:
@@ -130,7 +119,6 @@ def parse_retry_after(retry_after_value: Optional[str]) -> Optional[float]:
 
 
 def compute_backoff(attempt: int, retry_after: Optional[float] = None) -> float:
-    """Calcula espera con backoff exponencial y jitter para retries."""
     if retry_after is not None:
         return min(max(retry_after, 1.0), 120.0)
     jitter = random.uniform(0.0, 0.5)
@@ -138,7 +126,6 @@ def compute_backoff(attempt: int, retry_after: Optional[float] = None) -> float:
 
 
 def load_checkpoint(checkpoint_path: Path) -> Dict[str, object]:
-    """Carga checkpoint si existe; si no, retorna estado inicial."""
     if not checkpoint_path.exists():
         return {
             "last_doc_id": None,
@@ -173,7 +160,6 @@ def save_checkpoint(
     page_number: int,
     heap: List[Tuple[int, str, str]],
 ) -> None:
-    """Guarda estado parcial para poder reanudar ejecuciones largas."""
     payload = {
         "last_doc_id": last_doc_id,
         "processed": processed,
@@ -196,7 +182,6 @@ def fetch_package_ids_page(
     max_retries: int,
     timeout: int,
 ) -> Tuple[List[str], Optional[str]]:
-    """Obtiene una pagina de IDs de paquetes desde replicate._all_docs con retries."""
     session = get_thread_session()
 
     params: Dict[str, object] = {
@@ -236,7 +221,7 @@ def fetch_package_ids_page(
                         continue
                     next_doc_id = doc_id
 
-                    # startkey es inclusivo: se descarta el primer ID repetido del cursor previo.
+                    # startkey is inclusive: discard the first repeated ID from previous cursor.
                     if start_after_doc_id is not None and doc_id == start_after_doc_id:
                         continue
 
@@ -250,7 +235,7 @@ def fetch_package_ids_page(
                 retry_after = parse_retry_after(response.headers.get("Retry-After"))
                 wait_seconds = compute_backoff(attempt, retry_after)
                 print(
-                    f"[retry all_docs] HTTP {status_code} | intento {attempt}/{max_retries} | espera {wait_seconds:.1f}s"
+                    f"[RETRY] [all_docs] | registry | HTTP {status_code} | attempt {attempt}/{max_retries} | wait {wait_seconds:.1f}s"
                 )
                 time.sleep(wait_seconds)
                 continue
@@ -264,13 +249,12 @@ def fetch_package_ids_page(
                 ) from exc
             wait_seconds = compute_backoff(attempt)
             print(
-                f"[retry all_docs] error de red: {exc} | intento {attempt}/{max_retries} | espera {wait_seconds:.1f}s"
+                f"[RETRY] [all_docs] | registry | Error: {exc} | attempt {attempt}/{max_retries} | wait {wait_seconds:.1f}s"
             )
             time.sleep(wait_seconds)
 
 
 def extract_size_bytes(latest_payload: Dict[str, object]) -> Tuple[int, str]:
-    """Extrae tamano en bytes desde dist.unpackedSize o fallback dist.size."""
     dist = latest_payload.get("dist")
     if isinstance(dist, dict):
         unpacked_size = dist.get("unpackedSize")
@@ -289,7 +273,6 @@ def fetch_package_size(
     max_retries: int,
     timeout: int,
 ) -> Tuple[str, int, str, Optional[str]]:
-    """Consulta /latest y retorna tamano en bytes para un paquete con retries."""
     session = get_thread_session()
     encoded_name = quote(package_name, safe="")
     url = PACKAGE_LATEST_URL_TEMPLATE.format(encoded_name)
@@ -317,7 +300,7 @@ def fetch_package_size(
                 retry_after = parse_retry_after(response.headers.get("Retry-After"))
                 wait_seconds = compute_backoff(attempt, retry_after)
                 print(
-                    f"[retry latest] {package_name} | HTTP {status_code} | intento {attempt}/{max_retries} | espera {wait_seconds:.1f}s"
+                    f"[RETRY] [latest] | {package_name} | HTTP {status_code} | attempt {attempt}/{max_retries} | wait {wait_seconds:.1f}s"
                 )
                 time.sleep(wait_seconds)
                 continue
@@ -334,7 +317,7 @@ def fetch_package_size(
                 )
             wait_seconds = compute_backoff(attempt)
             print(
-                f"[retry latest] {package_name} | error de red: {exc} | intento {attempt}/{max_retries} | espera {wait_seconds:.1f}s"
+                f"[RETRY] [latest] | {package_name} | Error: {exc} | attempt {attempt}/{max_retries} | wait {wait_seconds:.1f}s"
             )
             time.sleep(wait_seconds)
 
@@ -351,7 +334,6 @@ def keep_top_heavy(
     size_bytes: int,
     source: str,
 ) -> None:
-    """Mantiene un heap minimo con los top_n paquetes de mayor tamano."""
     if size_bytes <= 0:
         return
 
@@ -371,7 +353,6 @@ def write_top_csv(
     output_csv: Path,
     top_n: int,
 ) -> None:
-    """Escribe CSV final ordenado descendente por bytes."""
     sorted_rows = sorted(heap, key=lambda item: item[0], reverse=True)[:top_n]
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -390,11 +371,11 @@ def write_top_csv(
                 }
             )
 
-    print(f"CSV final generado: {output_csv} | filas: {len(sorted_rows)}")
+    print(f"Final CSV generated: {output_csv} | rows: {len(sorted_rows)}")
 
 
 def main() -> None:
-    """Orquesta exploracion del registro NPM y construye top 10k por bytes."""
+    print("---- [STEP 0] GENERATE TOP 10K ----")
     args = parse_args()
     started_at = time.time()
 
@@ -415,14 +396,14 @@ def main() -> None:
             "page_number": 0,
             "heap": [],
         }
-        print("Inicio limpio solicitado (--fresh-start).")
+        print("Clean start requested (--fresh-start).")
     else:
         state = load_checkpoint(args.checkpoint)
         if state.get("processed", 0) > 0:
             print(
-                "Reanudando desde checkpoint: "
-                f"procesados={state.get('processed', 0)}, "
-                f"ultima_clave={state.get('last_doc_id')}"
+                "Resuming from checkpoint: "
+                f"processed={state.get('processed', 0)}, "
+                f"last_key={state.get('last_doc_id')}"
             )
 
     last_doc_id = state.get("last_doc_id")
@@ -447,8 +428,8 @@ def main() -> None:
     heapq.heapify(heap)
 
     print(
-        "Inicio de extraccion real para top pesados. "
-        "Este proceso puede tardar bastante (escaneo amplio del registro NPM)."
+        "Starting extraction for top largest packages. "
+        "This process may take a while (broad NPM registry scan)."
     )
 
     try:
@@ -456,7 +437,7 @@ def main() -> None:
             while True:
                 if args.max_packages is not None and processed >= args.max_packages:
                     print(
-                        f"Se alcanzo el limite maximo de prueba (--max-packages={args.max_packages})."
+                        f"Maximum test limit reached (--max-packages={args.max_packages})."
                     )
                     break
 
@@ -468,7 +449,7 @@ def main() -> None:
                 )
 
                 if not package_ids:
-                    print("No hay mas paquetes por leer desde _all_docs.")
+                    print("No more packages to read from _all_docs.")
                     break
 
                 if args.max_packages is not None:
@@ -479,7 +460,7 @@ def main() -> None:
 
                 page_number += 1
                 print(
-                    f"Pagina {page_number}: {len(package_ids)} paquetes para medir tamano (cursor={next_doc_id})"
+                    f"Page {page_number}: {len(package_ids)} packages to measure size (cursor={next_doc_id})"
                 )
 
                 futures = [
@@ -509,12 +490,11 @@ def main() -> None:
                     if processed % args.progress_every == 0:
                         threshold = heap[0][0] if heap else 0
                         print(
-                            "Progreso: "
-                            f"procesados={processed}, "
-                            f"con_tamano={with_size}, "
-                            f"sin_tamano={missing_size}, "
-                            f"incidencias={incidents}, "
-                            f"umbral_heap={threshold}"
+                            f"[PROGRESS] {processed} processed | "
+                            f"with_size: {with_size} | "
+                            f"missing_size: {missing_size} | "
+                            f"incidents: {incidents} | "
+                            f"threshold: {threshold}"
                         )
 
                 last_doc_id = next_doc_id
@@ -530,10 +510,10 @@ def main() -> None:
                         page_number=page_number,
                         heap=heap,
                     )
-                    print(f"Checkpoint guardado en {args.checkpoint}")
+                    print(f"Checkpoint saved at {args.checkpoint}")
 
                 if next_doc_id is None:
-                    print("Cursor final detectado. Fin del escaneo.")
+                    print("Final cursor detected. End of scan.")
                     break
 
         write_top_csv(heap, args.output_csv, args.top_n)
@@ -551,13 +531,13 @@ def main() -> None:
 
         elapsed = time.time() - started_at
         print(
-            "Proceso completado. "
-            f"Procesados={processed}, con_tamano={with_size}, sin_tamano={missing_size}, "
-            f"incidencias={incidents}, tiempo={elapsed:.1f}s"
+            f"[DONE] Process finished in {elapsed:.1f}s | "
+            f"processed: {processed} | with_size: {with_size} | missing_size: {missing_size} | "
+            f"incidents: {incidents}"
         )
 
     except KeyboardInterrupt:
-        print("\nInterrupcion detectada, guardando checkpoint...")
+        print("\nInterrupt detected, saving checkpoint...")
         save_checkpoint(
             checkpoint_path=args.checkpoint,
             last_doc_id=last_doc_id,
@@ -568,9 +548,9 @@ def main() -> None:
             page_number=page_number,
             heap=heap,
         )
-        print(f"Checkpoint guardado en {args.checkpoint}")
+        print(f"Checkpoint saved at {args.checkpoint}")
     except Exception as exc:
-        print(f"[error] Fallo no controlado: {exc}")
+        print(f"[ERROR] Unhandled failure: {exc}")
         save_checkpoint(
             checkpoint_path=args.checkpoint,
             last_doc_id=last_doc_id,
@@ -581,7 +561,7 @@ def main() -> None:
             page_number=page_number,
             heap=heap,
         )
-        print(f"Checkpoint guardado en {args.checkpoint}")
+        print(f"Checkpoint saved at {args.checkpoint}")
 
 
 if __name__ == "__main__":

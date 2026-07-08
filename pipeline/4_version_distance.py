@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Calcula la distancia de versiones entre la declarada y la ultima disponible.
-
-Para cada dependencia de cada paquete, consulta la version latest en el registry
-y compara contra la version declarada en el package.json.
-
-La version latest de cada dependencia se cachea en memoria para no consultar
-la misma dependencia mas de una vez aunque aparezca en multiples paquetes.
-
-Entrada:  data/raw/dependency_graph.json
-Salida:   data/metrics/version_distance.csv
-"""
+"""Calculates the semantic versioning distance between declared and latest dependencies."""
 
 from __future__ import annotations
 
@@ -66,24 +56,19 @@ def compute_backoff(attempt: int) -> float:
 
 
 def parse_semver(version_str: str) -> Tuple[int, int, int]:
-    """Extrae (major, minor, patch) de un string de version semver.
-
-    Maneja prefijos como ^, ~, >=, >, etc. y sufijos como -beta.1.
-    Retorna (0, 0, 0) si no se puede parsear.
-    """
     if not version_str or version_str in ("*", "latest", "x", ""):
         return (0, 0, 0)
 
-    # Tomar solo la primera parte si hay rangos como "1.0.0 || 2.0.0" o "1.0.0 - 2.0.0"
+    # Take only the first part if there are ranges like "1.0.0 || 2.0.0" or "1.0.0 - 2.0.0"
     version_str = version_str.split("||")[0].strip()
     version_str = version_str.split(" - ")[0].strip()
 
-    # Quitar operadores al inicio
+    # Remove operators at the beginning
     for op in (">=", "<=", "!=", "^", "~", ">", "<", "=", "v"):
         if version_str.startswith(op):
             version_str = version_str[len(op):].strip()
 
-    # Quitar sufijos de pre-release (-alpha, -beta, etc.)
+    # Remove pre-release suffixes (-alpha, -beta, etc.)
     version_str = version_str.split("-")[0].strip()
     version_str = version_str.split("+")[0].strip()
 
@@ -98,10 +83,6 @@ def parse_semver(version_str: str) -> Tuple[int, int, int]:
 
 
 def fetch_latest_version(dep_name: str) -> Tuple[str, Optional[str]]:
-    """Consulta registry.npmjs.org para obtener la version latest de una dependencia.
-
-    Retorna (dep_name, latest_version_str | None).
-    """
     session = get_session()
     url = REGISTRY_TEMPLATE.format(quote(dep_name, safe=""))
 
@@ -123,7 +104,7 @@ def fetch_latest_version(dep_name: str) -> Tuple[str, Optional[str]]:
 
             if status == 429 or 500 <= status < 600:
                 wait = compute_backoff(attempt)
-                print(f"[retry] {dep_name} | HTTP {status} | intento {attempt} | espera {wait:.1f}s")
+                print(f"[RETRY] [npm_api] | {dep_name} | HTTP {status} | attempt {attempt}/{DEFAULT_MAX_RETRIES} | wait {wait:.1f}s")
                 time.sleep(wait)
                 continue
 
@@ -133,7 +114,7 @@ def fetch_latest_version(dep_name: str) -> Tuple[str, Optional[str]]:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return dep_name, None
             wait = compute_backoff(attempt)
-            print(f"[retry] {dep_name} | error de red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            print(f"[RETRY] [npm_api] | {dep_name} | Error: {exc} | attempt {attempt}/{DEFAULT_MAX_RETRIES} | wait {wait:.1f}s")
             time.sleep(wait)
 
     return dep_name, None
@@ -149,11 +130,6 @@ def load_graph(json_path: Path) -> Dict:
 
 
 def collect_unique_deps(graph: Dict) -> Dict[str, List[Tuple[str, str, str]]]:
-    """Recorre el grafo y agrupa los pares (package, declared_version) por dependencia.
-
-    Retorna: {dep_name: [(package_name, declared_version, dep_type), ...]}
-    donde dep_type es 'prod' o 'dev'.
-    """
     dep_map: Dict[str, List[Tuple[str, str, str]]] = {}
 
     for package_name, package_data in graph.items():
@@ -172,7 +148,6 @@ def build_rows(
     dep_map: Dict[str, List[Tuple[str, str, str]]],
     latest_cache: Dict[str, Optional[str]],
 ) -> List[Dict]:
-    """Construye las filas del CSV cruzando versiones declaradas con las latest."""
     rows = []
 
     for dep_name, usages in dep_map.items():
@@ -209,21 +184,21 @@ def save_csv(rows: List[Dict], output_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-    print(f"CSV generado: {output_path} | filas: {len(rows)}")
+    print(f"[INFO] CSV generated: {output_path} | rows: {len(rows)}")
 
 
 def main() -> None:
+    print("---- [STEP 4] CALCULATE VERSION DISTANCE ----")
     args = parse_args()
     started_at = time.time()
 
     graph = load_graph(args.input_json)
-    print(f"Grafo cargado: {len(graph)} paquetes")
+    print(f"[INFO] Graph loaded: {len(graph)} packages")
 
     dep_map = collect_unique_deps(graph)
     unique_deps = list(dep_map.keys())
-    print(f"Dependencias unicas a consultar: {len(unique_deps)}")
+    print(f"[INFO] Unique dependencies to fetch: {len(unique_deps)}")
 
-    # Obtener latest version para cada dependencia unica
     latest_cache: Dict[str, Optional[str]] = {}
     completed = 0
     total = len(unique_deps)
@@ -235,15 +210,15 @@ def main() -> None:
             latest_cache[dep_name] = latest
             completed += 1
             if completed % 100 == 0 or completed == total:
-                print(f"Progreso: {completed}/{total} dependencias consultadas...")
+                print(f"[PROGRESS] {completed}/{total} ({completed / total:.1%}) | dependencies fetched")
 
-    print(f"Cache de versiones completada. Calculando distancias...")
+    print(f"[INFO] Versions cache completed. Calculating distances...")
 
     rows = build_rows(dep_map, latest_cache)
     save_csv(rows, args.output_csv)
 
     elapsed = time.time() - started_at
-    print(f"Proceso finalizado en {elapsed:.1f}s | filas generadas: {len(rows)}")
+    print(f"[DONE] Process finished in {elapsed:.1f}s | rows: {len(rows)}")
 
 
 if __name__ == "__main__":

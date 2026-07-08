@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Filtra paquetes por popularidad semanal en NPM y guarda el top 5000."""
+"""Filters the top 10,000 NPM packages to obtain the 5,000 most popular by downloads."""
 
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ _thread_local = threading.local()
 
 
 def get_session() -> requests.Session:
-    """Crea o reutiliza una sesion HTTP por hilo para mejorar rendimiento."""
     if not hasattr(_thread_local, "session"):
         session = requests.Session()
         session.headers.update(
@@ -47,7 +46,6 @@ def get_session() -> requests.Session:
 
 
 def parse_retry_after(retry_after_value: Optional[str]) -> Optional[float]:
-    """Convierte la cabecera Retry-After a segundos cuando viene disponible."""
     if not retry_after_value:
         return None
     try:
@@ -57,7 +55,6 @@ def parse_retry_after(retry_after_value: Optional[str]) -> Optional[float]:
 
 
 def compute_backoff(attempt: int, retry_after: Optional[float] = None) -> float:
-    """Calcula tiempo de espera con backoff exponencial y jitter."""
     if retry_after is not None:
         return min(max(retry_after, 1.0), 120.0)
     jitter = random.uniform(0.0, 0.5)
@@ -65,7 +62,6 @@ def compute_backoff(attempt: int, retry_after: Optional[float] = None) -> float:
 
 
 def read_package_names(csv_path: Path) -> List[str]:
-    """Lee un CSV y retorna nombres de paquete unicos desde la columna package_name."""
     if not csv_path.exists():
         raise FileNotFoundError(
             f"No se encontro el archivo de entrada: {csv_path}. "
@@ -88,13 +84,12 @@ def read_package_names(csv_path: Path) -> List[str]:
 
     unique_package_names = list(dict.fromkeys(package_names))
     print(
-        f"Paquetes leidos: {len(package_names)} | Paquetes unicos: {len(unique_package_names)}"
+        f"Packages read: {len(package_names)} | Unique packages: {len(unique_package_names)}"
     )
     return unique_package_names
 
 
 def fetch_downloads(package_name: str) -> Tuple[str, int, Optional[str]]:
-    """Consulta la API de descargas semanales para un paquete con reintentos robustos."""
     encoded_package_name = quote(package_name, safe="")
     url = API_TEMPLATE.format(encoded_package_name)
     session = get_session()
@@ -122,7 +117,7 @@ def fetch_downloads(package_name: str) -> Tuple[str, int, Optional[str]]:
                 retry_after = parse_retry_after(response.headers.get("Retry-After"))
                 wait_seconds = compute_backoff(attempt, retry_after)
                 print(
-                    f"[retry] {package_name} | HTTP {status_code} | intento {attempt}/{MAX_RETRIES} | espera {wait_seconds:.1f}s"
+                    f"[RETRY] [npm_api] | {package_name} | HTTP {status_code} | attempt {attempt}/{MAX_RETRIES} | wait {wait_seconds:.1f}s"
                 )
                 time.sleep(wait_seconds)
                 continue
@@ -134,7 +129,7 @@ def fetch_downloads(package_name: str) -> Tuple[str, int, Optional[str]]:
                 return package_name, 0, f"Error de red tras {MAX_RETRIES} intentos: {exc}"
             wait_seconds = compute_backoff(attempt)
             print(
-                f"[retry] {package_name} | error de red: {exc} | intento {attempt}/{MAX_RETRIES} | espera {wait_seconds:.1f}s"
+                f"[RETRY] [npm_api] | {package_name} | Error: {exc} | attempt {attempt}/{MAX_RETRIES} | wait {wait_seconds:.1f}s"
             )
             time.sleep(wait_seconds)
 
@@ -145,14 +140,13 @@ def fetch_downloads(package_name: str) -> Tuple[str, int, Optional[str]]:
 
 
 def collect_downloads(package_names: Iterable[str]) -> List[Dict[str, int]]:
-    """Ejecuta consultas en paralelo y devuelve lista con paquete y descargas."""
     package_list = list(package_names)
     total_packages = len(package_list)
     results: List[Dict[str, int]] = []
     incidents = 0
 
     print(
-        f"Iniciando consultas de descargas para {total_packages} paquetes con {MAX_WORKERS} workers..."
+        f"Starting downloads fetch for {total_packages} packages with {MAX_WORKERS} workers..."
     )
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -181,7 +175,7 @@ def collect_downloads(package_names: Iterable[str]) -> List[Dict[str, int]]:
             completed += 1
             if completed % 100 == 0 or completed == total_packages:
                 print(
-                    f"Progreso: {completed}/{total_packages} ({completed / total_packages:.1%}) | incidencias: {incidents}"
+                    f"[PROGRESS] {completed}/{total_packages} ({completed / total_packages:.1%}) | incidents: {incidents}"
                 )
 
     return results
@@ -190,7 +184,6 @@ def collect_downloads(package_names: Iterable[str]) -> List[Dict[str, int]]:
 def save_top_packages(
     package_stats: List[Dict[str, int]], output_path: Path, top_n: int = TOP_N
 ) -> None:
-    """Ordena por descargas en orden descendente y guarda los top_n en CSV."""
     sorted_stats = sorted(
         package_stats, key=lambda item: item.get("downloads", 0), reverse=True
     )
@@ -202,17 +195,17 @@ def save_top_packages(
         writer.writeheader()
         writer.writerows(top_packages)
 
-    print(f"Archivo generado: {output_path} | filas: {len(top_packages)}")
+    print(f"File generated: {output_path} | rows: {len(top_packages)}")
 
 
 def main() -> None:
-    """Orquesta lectura, consulta concurrente, ordenamiento y exportacion del top 5000."""
+    print("---- [STEP 1] FILTER POPULARITY ----")
     started_at = time.time()
 
     try:
         package_names = read_package_names(INPUT_CSV)
         if not package_names:
-            print("No hay paquetes para procesar. Se aborta ejecucion.")
+            print("No packages to process. Aborting execution.")
             return
 
         if len(package_names) < MIN_EXPECTED_INPUT_PACKAGES:
@@ -225,16 +218,16 @@ def main() -> None:
         save_top_packages(package_stats, OUTPUT_CSV, TOP_N)
 
         elapsed = time.time() - started_at
-        print(f"Proceso finalizado en {elapsed:.1f} segundos.")
+        print(f"[DONE] Process finished in {elapsed:.1f}s | rows: {TOP_N}")
 
     except FileNotFoundError as exc:
         print(f"[error] {exc}")
     except ValueError as exc:
         print(f"[error] {exc}")
     except KeyboardInterrupt:
-        print("\nEjecucion interrumpida por usuario.")
+        print("\nExecution interrupted by user.")
     except Exception as exc:
-        print(f"[error] Falla no controlada: {exc}")
+        print(f"[ERROR] Unhandled failure: {exc}")
 
 
 if __name__ == "__main__":

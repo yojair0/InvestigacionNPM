@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Calcula fan-in global de los 5k paquetes NPM recorriendo todo el catalogo.
-
-Recorre ~4M paquetes via replicate.npmjs.com/_all_docs, consulta sus dependencias
-y cuenta cuantas veces cada uno de los 5k paquetes objetivo es referenciado.
-
-Separado en:
-  - fan_in_prod: referencias desde 'dependencies' (produccion)
-  - fan_in_dev:  referencias desde 'devDependencies' (desarrollo)
-
-Entrada:  data/raw/top_5k_by_downloads.csv
-Salida:   data/metrics/fanin_global_report.csv
-"""
+"""Calculates the global fan-in metrics scanning the entire NPM catalog."""
 
 from __future__ import annotations
 
@@ -87,7 +76,6 @@ def parse_retry_after(value: Optional[str]) -> Optional[float]:
 
 
 def load_target_packages(csv_path: Path) -> Set[str]:
-    """Carga los 5k paquetes objetivo en un Set para busqueda O(1)."""
     if not csv_path.exists():
         raise FileNotFoundError(
             f"No se encontro: {csv_path}. Generalo con 1_filter_popularity.py"
@@ -98,7 +86,7 @@ def load_target_packages(csv_path: Path) -> Set[str]:
             name = (row.get("package_name") or "").strip()
             if name:
                 names.add(name)
-    print(f"Paquetes objetivo cargados: {len(names)}")
+    print(f"[INFO] Target packages loaded: {len(names)}")
     return names
 
 
@@ -134,7 +122,6 @@ def fetch_page_ids(
     start_after: Optional[str],
     page_size: int,
 ) -> Tuple[List[str], Optional[str]]:
-    """Obtiene una pagina de IDs de paquetes desde replicate._all_docs."""
     session = get_session()
     params: Dict = {"limit": page_size}
     if start_after is not None:
@@ -167,22 +154,21 @@ def fetch_page_ids(
             if status == 429 or 500 <= status < 600:
                 wait = compute_backoff(attempt, parse_retry_after(
                     response.headers.get("Retry-After")))
-                print(f"[retry all_docs] HTTP {status} | intento {attempt} | espera {wait:.1f}s")
+                print(f"[RETRY] [all_docs] | registry | HTTP {status} | attempt {attempt}/{DEFAULT_MAX_RETRIES} | wait {wait:.1f}s")
                 time.sleep(wait)
                 continue
 
-            raise RuntimeError(f"HTTP inesperado en _all_docs: {status}")
+            raise RuntimeError(f"Unexpected HTTP in _all_docs: {status}")
 
         except RequestException as exc:
             if attempt >= DEFAULT_MAX_RETRIES:
-                raise RuntimeError(f"Error de red en _all_docs: {exc}") from exc
+                raise RuntimeError(f"Network error in _all_docs: {exc}") from exc
             time.sleep(compute_backoff(attempt))
 
     return [], None
 
 
 def fetch_package_deps(package_name: str) -> Tuple[str, Set[str], Set[str]]:
-    """Consulta /latest y retorna (nombre, prod_deps, dev_deps)."""
     session = get_session()
     url = REGISTRY_LATEST_TEMPLATE.format(quote(package_name, safe=""))
 
@@ -210,7 +196,7 @@ def fetch_package_deps(package_name: str) -> Tuple[str, Set[str], Set[str]]:
             if status == 429 or 500 <= status < 600:
                 wait = compute_backoff(attempt, parse_retry_after(
                     response.headers.get("Retry-After")))
-                print(f"[retry deps] {package_name} | HTTP {status} | intento {attempt} | espera {wait:.1f}s")
+                print(f"[RETRY] [deps] | {package_name} | HTTP {status} | attempt {attempt}/{DEFAULT_MAX_RETRIES} | wait {wait:.1f}s")
                 time.sleep(wait)
                 continue
 
@@ -220,7 +206,7 @@ def fetch_package_deps(package_name: str) -> Tuple[str, Set[str], Set[str]]:
             if attempt >= DEFAULT_MAX_RETRIES:
                 return package_name, set(), set()
             wait = compute_backoff(attempt)
-            print(f"[retry deps] {package_name} | error de red: {exc} | intento {attempt} | espera {wait:.1f}s")
+            print(f"[RETRY] [deps] | {package_name} | Error: {exc} | attempt {attempt}/{DEFAULT_MAX_RETRIES} | wait {wait:.1f}s")
             time.sleep(wait)
 
     return package_name, set(), set()
@@ -228,7 +214,6 @@ def fetch_package_deps(package_name: str) -> Tuple[str, Set[str], Set[str]]:
 
 def save_results(counters_prod: Dict[str, int], counters_dev: Dict[str, int],
                  target_packages: Set[str], output_path: Path) -> None:
-    """Guarda el reporte final de fan-in global en CSV."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     rows = []
     for pkg in sorted(target_packages):
@@ -243,11 +228,11 @@ def save_results(counters_prod: Dict[str, int], counters_dev: Dict[str, int],
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"CSV generado: {output_path} | filas: {len(rows)}")
+    print(f"[INFO] CSV generated: {output_path} | rows: {len(rows)}")
 
 
 def main() -> None:
-    """Orquesta el escaneo global del catalogo NPM para calcular fan-in."""
+    print("---- [STEP 3B] CALCULATE GLOBAL FAN IN ----")
     args = parse_args()
     started_at = time.time()
 
@@ -256,12 +241,12 @@ def main() -> None:
     if args.fresh_start:
         state: Dict = {"last_doc_id": None, "processed": 0, "page_number": 0,
                        "counters_prod": {}, "counters_dev": {}}
-        print("Inicio limpio solicitado (--fresh-start).")
+        print("Clean start requested (--fresh-start).")
     else:
         state = load_checkpoint(args.checkpoint)
         if state["processed"] > 0:
-            print(f"Reanudando desde checkpoint: procesados={state['processed']}, "
-                  f"pagina={state['page_number']}")
+            print(f"Resuming from checkpoint: processed={state['processed']}, "
+                  f"page={state['page_number']}")
 
     last_doc_id: Optional[str] = state["last_doc_id"]
     processed: int = state["processed"]
@@ -269,26 +254,26 @@ def main() -> None:
     counters_prod: Dict[str, int] = state["counters_prod"]
     counters_dev: Dict[str, int] = state["counters_dev"]
 
-    print("Iniciando escaneo global. Usa Ctrl+C para pausar y reanudar luego.")
+    print("Starting global scan. Use Ctrl+C to pause and resume later.")
 
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
             while True:
                 if args.max_packages is not None and processed >= args.max_packages:
-                    print(f"Limite de prueba alcanzado (--max-packages={args.max_packages}).")
+                    print(f"Maximum test limit reached (--max-packages={args.max_packages}).")
                     break
 
                 page_ids, next_doc_id = fetch_page_ids(last_doc_id, args.page_size)
 
                 if not page_ids:
-                    print("No hay mas paquetes. Escaneo completo.")
+                    print("No more packages. Scan complete.")
                     break
 
                 if args.max_packages is not None:
                     page_ids = page_ids[:args.max_packages - processed]
 
                 page_number += 1
-                print(f"Procesando página {page_number} ({len(page_ids)} paquetes) | Total procesados hasta ahora: {processed:,}")
+                print(f"Processing page {page_number} ({len(page_ids)} packages) | Total processed so far: {processed:,}")
 
                 futures = {
                     executor.submit(fetch_package_deps, pkg_id): pkg_id
@@ -310,21 +295,19 @@ def main() -> None:
                             counters_dev[dep] = counters_dev.get(dep, 0) + 1
 
                     processed += 1
-                    if processed % 50 == 0:
-                        print(f"  -> {processed:,} paquetes procesados...")
                     if processed % DEFAULT_PROGRESS_EVERY == 0:
-                        print(f"Progreso: {processed:,} paquetes escaneados "
-                              f"(pagina {page_number})")
+                        print(f"[PROGRESS] {processed:,} processed | "
+                              f"page: {page_number}")
 
                 last_doc_id = next_doc_id
 
                 if page_number % DEFAULT_CHECKPOINT_EVERY_PAGES == 0:
                     save_checkpoint(args.checkpoint, last_doc_id, processed,
                                     page_number, counters_prod, counters_dev)
-                    print(f"Checkpoint guardado (pagina {page_number})")
+                    print(f"Checkpoint saved (page {page_number})")
 
                 if next_doc_id is None:
-                    print("Cursor final detectado. Fin del escaneo.")
+                    print("Final cursor detected. End of scan.")
                     break
 
         save_results(counters_prod, counters_dev, target_packages, args.output_csv)
@@ -332,16 +315,16 @@ def main() -> None:
                         counters_prod, counters_dev)
 
         elapsed = time.time() - started_at
-        print(f"Proceso finalizado en {elapsed:.1f}s | escaneados: {processed:,}")
+        print(f"[DONE] Process finished in {elapsed:.1f}s | scanned: {processed:,}")
 
     except KeyboardInterrupt:
-        print("\nPausa solicitada. Guardando checkpoint...")
+        print("\nPause requested. Saving checkpoint...")
         save_checkpoint(args.checkpoint, last_doc_id, processed, page_number,
                         counters_prod, counters_dev)
-        print(f"Checkpoint guardado. Puedes reanudar sin perder avance.")
+        print(f"Checkpoint saved. You can resume without losing progress.")
 
     except Exception as exc:
-        print(f"[error] Falla no controlada: {exc}")
+        print(f"[ERROR] Unhandled failure: {exc}")
         save_checkpoint(args.checkpoint, last_doc_id, processed, page_number,
                         counters_prod, counters_dev)
 

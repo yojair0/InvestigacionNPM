@@ -1,3 +1,4 @@
+/** Extracts internal metrics using JTMetrics for the given packages. */
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -184,16 +185,16 @@ function getProcessedPackages() {
 }
 
 async function run() {
-    console.log('=== JTMetrics Inner Analysis ===');
+    console.log('---- [STEP 6] EXTRACT INNER METRICS ----');
     console.log(`Input: ${FILE_INPUT}`);
     console.log(`Output: ${FILE_OUTPUT}`);
 
     const packages = readPackages();
-    console.log(`Loaded ${packages.length} packages from CSV`);
+    console.log(`[INFO] Loaded ${packages.length} packages from CSV`);
 
     const processed = getProcessedPackages();
     if (processed.size > 0) {
-        console.log(`Resuming: ${processed.size} packages already processed, skipping them`);
+        console.log(`[INFO] Resuming: ${processed.size} packages already processed`);
     }
 
     const startTime = Date.now();
@@ -211,7 +212,7 @@ async function run() {
         const pkgDir = path.join(TMP_DIR, pkg.name.replace(/[\/@]/g, '__'));
 
         try {
-            console.log(`${progress} Analyzing ${pkg.name}@${pkg.version}...`);
+            console.log(`[PROGRESS] ${i + 1}/${packages.length} | Analyzing ${pkg.name}@${pkg.version}...`);
 
             const tarballUrl = await getTarballUrl(pkg.name, pkg.version);
 
@@ -234,7 +235,7 @@ async function run() {
 
         } catch (err) {
             errorCount++;
-            console.error(`  ERROR: ${err.message}`);
+            console.error(`  [ERROR] ${err.message}`);
 
             const errorResult = {
                 package: pkg.name,
@@ -251,20 +252,19 @@ async function run() {
 
         if ((i + 1) % 50 === 0) {
             const elapsed = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-            console.log(`--- Progress: ${successCount} ok, ${errorCount} errors, ${elapsed} min elapsed ---`);
+            console.log(`[PROGRESS] ${successCount} ok | ${errorCount} errors | ${elapsed} min elapsed`);
         }
     }
 
     rmDir(TMP_DIR);
 
     const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-    console.log('\n=== Analysis Complete ===');
-    console.log(`Success: ${successCount} | Errors: ${errorCount} | Time: ${totalTime} min`);
-    console.log(`Output: ${FILE_OUTPUT}`);
+    console.log(`[DONE] Process finished in ${totalTime} min | success: ${successCount} | errors: ${errorCount}`);
+    console.log(`[INFO] Output: ${FILE_OUTPUT}`);
 }
 
 run().catch((err) => {
-    console.error('FATAL ERROR:', err);
+    console.error('[ERROR] FATAL ERROR:', err);
     process.exitCode = 1;
 });
 
