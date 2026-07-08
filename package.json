@@ -4,11 +4,11 @@
   "private": true,
   "description": "CLI Node.js para calcular JTMetrics sobre metadata local de paquetes NPM.",
   "dependencies": {
-    "@babel/parser": "^7.25.0",
-    "@babel/traverse": "^7.25.0"
+    "jtmetrics": "*",
+    "tar-stream": "^3.1.7"
   },
   "scripts": {
-    "jtmetrics": "node pipeline/6_apply_jtmetrics.js"
+    "jtmetrics": "node \"pipeline/6_ extract_inner_metrics_jt.js\""
   },
   "engines": {
     "node": ">=18"

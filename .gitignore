@@ -2,11 +2,7 @@
 backups/
 __pycache__/
 *.pyc
-data/raw/checkpoint_top10k.json
-data/raw/checkpoint_fanin_global.json
-data/raw/checkpoint_package_info.json
-data/metrics/analysis_results.txt
-data/metrics/analyze.py
+data/raw/checkpoint_*.json
 node_modules/
 tmp_extract/
 data/metrics/inner_metrics_jt.ndjson
