@@ -1,33 +1,33 @@
-# Documentación del Pipeline de Análisis NPM
+# NPM Analysis Pipeline Documentation
 
-## 1. Propósito y Metodología
-Analizar la fragilidad estructural del ecosistema NPM identificando nodos críticos de infraestructura a través de su topología de red y métricas internas de código.
-Se trabaja sobre 5.000 paquetes para evitar sesgos de la periferia. Se extraen tanto métricas de red (Fan-Out, Fan-In) como métricas de código internas.
+## 1. Purpose and Methodology
+Analyze the structural fragility of the NPM ecosystem by identifying critical infrastructure nodes through its network topology and internal code metrics.
+We work with 5,000 packages to avoid peripheral bias. Both network metrics (Fan-Out, Fan-In) and internal code metrics are extracted.
 
-## 2. Flujo del Pipeline
+## 2. Pipeline Workflow
 
-**Paso 0: Obtención del Top 10k por tamaño**
-(`pipeline/0_generate_top10k.py`): Recorre el catálogo paginado de NPM y selecciona los 10.000 paquetes con mayor tamaño. Usa checkpoints para generar `top_10k_by_size.csv`.
+**Step 0: Retrieve Top 10k by Size**
+(`pipeline/0_generate_top10k.py`): Crawls the paginated NPM catalog and selects the 10,000 largest packages. Uses checkpoints to generate `top_10k_by_size.csv`.
 
-**Paso 1: Filtrado por popularidad**
-(`pipeline/1_filter_popularity.py`): Consulta la API de descargas semanales y filtra los 10.000 previos para quedarse con los 5.000 más populares en `top_5k_by_downloads.csv`.
+**Step 1: Filter by Popularity**
+(`pipeline/1_filter_popularity.py`): Queries the weekly downloads API and filters the previous 10,000 to keep the 5,000 most popular in `top_5k_by_downloads.csv`.
 
-**Paso 2: Construcción del grafo de dependencias**
-(`pipeline/2_build_graph.py`): Extrae dependencias (prod y dev) para la versión `latest` de los 5.000 paquetes, creando `dependency_graph.json`.
+**Step 2: Build Dependency Graph**
+(`pipeline/2_build_graph.py`): Extracts dependencies (prod and dev) for the `latest` version of the 5,000 packages, creating `dependency_graph.json`.
 
-**Paso 3: Cálculo de métricas de red (Fan-Out y Fan-In)**
-(`pipeline/3a_calc_fanout.py` y `pipeline/3b_calc_fanin_global.py`): Se calcula el Fan-Out localmente (`fanout_report.csv`) y luego se escanean ~4M de paquetes en el catálogo para calcular el Fan-In global hacia nuestros paquetes (`fanin_global_report.csv`).
+**Step 3: Calculate Network Metrics (Fan-Out and Fan-In)**
+(`pipeline/3a_calc_fanout.py` and `pipeline/3b_calc_fanin_global.py`): Fan-Out is calculated locally (`fanout_report.csv`) and then ~4M packages in the catalog are scanned to calculate the global Fan-In towards our target packages (`fanin_global_report.csv`).
 
-**Paso 4: Distancia de versiones**
-(`pipeline/4_version_distance.py`): Evalúa la divergencia de versiones entre lo declarado y lo disponible, guardando los resultados en `version_distance.csv`.
+**Step 4: Version Distance**
+(`pipeline/4_version_distance.py`): Evaluates the version divergence between what is declared and what is available, saving the results in `version_distance.csv`.
 
-**Paso 5: Extracción de metadatos**
-(`pipeline/5_package_info.py`): Recolecta metadata adicional (tamaño, número de archivos) y produce `packages_info.csv`.
+**Step 5: Metadata Extraction**
+(`pipeline/5_package_info.py`): Collects additional metadata (size, file count) and produces `packages_info.csv`.
 
-**Paso 6: Extracción de métricas internas (AST)**
-(`pipeline/6_ extract_inner_metrics_jt.js` y `jt_worker.js`): Descarga el código fuente de los paquetes temporalmente y calcula métricas internas en paralelo con `jtmetrics`, emitiendo `inner_metrics_jt.ndjson`.
+**Step 6: Internal Metrics Extraction (AST)**
+(`pipeline/6_ extract_inner_metrics_jt.js` and `jt_worker.js`): Temporarily downloads the source code of the packages and calculates internal metrics in parallel with `jtmetrics`, outputting `inner_metrics_jt.ndjson`.
 
-## 3. Entregables Generados
+## 3. Generated Deliverables
 - `top_10k_by_size.csv`
 - `top_5k_by_downloads.csv`
 - `dependency_graph.json`
@@ -37,35 +37,34 @@ Se trabaja sobre 5.000 paquetes para evitar sesgos de la periferia. Se extraen t
 - `packages_info.csv`
 - `inner_metrics_jt.ndjson`
 
-## 4. Ejecución del Pipeline
+## 4. Pipeline Execution
 
-Ejecución completa usando el orquestador:
+Complete execution using the orchestrator:
 ```powershell
 .\run_pipeline.ps1 -FreshStart
 ```
 
-Ejecución omitiendo pasos costosos (si ya se hicieron):
+Execution skipping the most expensive steps (if previously completed):
 ```powershell
-.\run_pipeline.ps1 -SkipTop10k -SkipFanin
+.\run_pipeline.ps1 -SkipExtractLargestPackages -SkipCalculateGlobalFanIn
 ```
 
-Ejecutar solo métricas internas:
+Run only internal metrics collection:
 ```powershell
-.\run_pipeline.ps1 -OnlyJTMetrics
+.\run_pipeline.ps1 -RunOnlyExtractInternalMetrics
 ```
 
-Ejecutar etapas manualmente:
+Run a test limiting resources (Workers, Pagination, Package limit):
 ```powershell
-.\.venv\Scripts\python.exe pipeline\0_generate_top10k.py
+.\run_pipeline.ps1 -RunOnlyCalculateGlobalFanIn -MaxPackagesLimit 500 -WorkersCount 5
+```
+
+Execute individual stages manually (without the orchestrator):
+```powershell
+.\.venv\Scripts\python.exe pipeline\0_generate_top10k.py --workers 10
 .\.venv\Scripts\python.exe pipeline\1_filter_popularity.py
 .\.venv\Scripts\python.exe pipeline\2_build_graph.py
 .\.venv\Scripts\python.exe pipeline\3a_calc_fanout.py
-.\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py
+.\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py --workers 10 --max-packages 500
 node "pipeline\6_ extract_inner_metrics_jt.js"
-```
-
-Prueba de ejecución con paquetes limitados:
-```powershell
-.\.venv\Scripts\python.exe pipeline\0_generate_top10k.py --max-packages 1000
-.\.venv\Scripts\python.exe pipeline\3b_calc_fanin_global.py --max-packages 500
 ```

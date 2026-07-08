@@ -1,19 +1,19 @@
 param(
     [switch]$FreshStart,
-    [switch]$SkipTop10k,
-    [switch]$SkipFanin,
-    [switch]$SkipJTMetrics,
-    [switch]$OnlyTop10k,
-    [switch]$OnlyFilter,
-    [switch]$OnlyGraph,
-    [switch]$OnlyFanout,
-    [switch]$OnlyFanin,
-    [switch]$OnlyVersionDistance,
-    [switch]$OnlyPackageInfo,
-    [switch]$OnlyJTMetrics,
-    [int]$Workers = 10,
-    [int]$PageSize = 300,
-    [int]$MaxPackages = 0
+    [switch]$SkipExtractLargestPackages,
+    [switch]$SkipCalculateGlobalFanIn,
+    [switch]$SkipExtractInternalMetrics,
+    [switch]$RunOnlyExtractLargestPackages,
+    [switch]$RunOnlyFilterMostDownloaded,
+    [switch]$RunOnlyBuildDependencyGraph,
+    [switch]$RunOnlyCalculateFanOut,
+    [switch]$RunOnlyCalculateGlobalFanIn,
+    [switch]$RunOnlyCalculateVersionDistance,
+    [switch]$RunOnlyCollectPackageMetadata,
+    [switch]$RunOnlyExtractInternalMetrics,
+    [int]$WorkersCount = 10,
+    [int]$PageSizeLimit = 300,
+    [int]$MaxPackagesLimit = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,7 +56,7 @@ function Run-Step {
         throw "No se recibieron argumentos para el paso: $Name"
     }
 
-    Write-Host "\n=== $Name ===" -ForegroundColor Cyan
+    Write-Host "`n=== $Name ===" -ForegroundColor Cyan
     Write-Host "$PythonExe $($ScriptArgs -join ' ')" -ForegroundColor DarkGray
     & $PythonExe @ScriptArgs
     if ($LASTEXITCODE -ne 0) {
@@ -70,78 +70,80 @@ $startedAt = Get-Date
 Write-Host "Python seleccionado: $pythonExe" -ForegroundColor Green
 Ensure-RequestsInstalled -PythonExe $pythonExe
 
-if ($OnlyPackageInfo) {
-    Run-Step -Name "Paso 5: Informacionn de paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py", "--workers", "$Workers")
+if ($RunOnlyCollectPackageMetadata) {
+    Run-Step -Name "Recopilación de Metadatos de Paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py", "--workers", "$WorkersCount")
 }
-elseif ($OnlyJTMetrics) {
+elseif ($RunOnlyExtractInternalMetrics) {
     $nodeExe = Get-NodeExe
-    Write-Host "\n=== Paso 6: JTMetrics (Node CLI) ===" -ForegroundColor Cyan
-    Write-Host "$nodeExe pipeline\6_apply_jtmetrics.js" -ForegroundColor DarkGray
-    & $nodeExe "pipeline\6_apply_jtmetrics.js"
+    Write-Host "`n=== Extracción de Métricas Internas (JTMetrics) ===" -ForegroundColor Cyan
+    Write-Host "$nodeExe `"pipeline\6_ extract_inner_metrics_jt.js`"" -ForegroundColor DarkGray
+    & $nodeExe "pipeline\6_ extract_inner_metrics_jt.js"
     if ($LASTEXITCODE -ne 0) {
-        throw "Fallo en paso: JTMetrics"
+        throw "Fallo en extracción de métricas internas"
     }
 }
-elseif ($OnlyVersionDistance) {
-    Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
+elseif ($RunOnlyCalculateVersionDistance) {
+    Run-Step -Name "Cálculo de Distancia de Versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py", "--workers", "$WorkersCount")
 }
-elseif ($OnlyFanout) {
-    Run-Step -Name "Paso 3a: Calcular fan-out" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
+elseif ($RunOnlyCalculateFanOut) {
+    Run-Step -Name "Cálculo de Fan-out local" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
 }
-elseif ($OnlyFanin) {
-    $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$Workers", "--page-size", "$PageSize")
-    if ($MaxPackages -gt 0) { $args3b += @("--max-packages", "$MaxPackages") }
+elseif ($RunOnlyCalculateGlobalFanIn) {
+    $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$WorkersCount", "--page-size", "$PageSizeLimit")
+    if ($MaxPackagesLimit -gt 0) { $args3b += @("--max-packages", "$MaxPackagesLimit") }
     if ($FreshStart) { $args3b += "--fresh-start" }
-    Run-Step -Name "Paso 3b: Calcular fan-in global" -PythonExe $pythonExe -ScriptArgs $args3b
+    Run-Step -Name "Cálculo de Fan-in Global" -PythonExe $pythonExe -ScriptArgs $args3b
 }
-elseif ($OnlyGraph) {
-    Run-Step -Name "Paso 2: Construir grafo final" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
+elseif ($RunOnlyBuildDependencyGraph) {
+    Run-Step -Name "Construcción del Grafo de Dependencias" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
 }
-elseif ($OnlyFilter) {
-    Run-Step -Name "Paso 1: Filtrar top 5000 por descargas" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
+elseif ($RunOnlyFilterMostDownloaded) {
+    Run-Step -Name "Filtrado de los Paquetes Más Descargados" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
 }
-elseif ($OnlyTop10k) {
-    $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
-    if ($MaxPackages -gt 0) { $args0 += @("--max-packages", "$MaxPackages") }
+elseif ($RunOnlyExtractLargestPackages) {
+    $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$WorkersCount", "--page-size", "$PageSizeLimit")
+    if ($MaxPackagesLimit -gt 0) { $args0 += @("--max-packages", "$MaxPackagesLimit") }
     if ($FreshStart) { $args0 += "--fresh-start" }
-    Run-Step -Name "Paso 0: Generar top 10k pesados" -PythonExe $pythonExe -ScriptArgs $args0
+    Run-Step -Name "Extracción de Paquetes Más Pesados" -PythonExe $pythonExe -ScriptArgs $args0
 }
 else {
-    if (-not $SkipTop10k) {
-        $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$Workers", "--page-size", "$PageSize")
-        if ($MaxPackages -gt 0) { $args0 += @("--max-packages", "$MaxPackages") }
+    if (-not $SkipExtractLargestPackages) {
+        $args0 = @("pipeline\0_generate_top10k.py", "--workers", "$WorkersCount", "--page-size", "$PageSizeLimit")
+        if ($MaxPackagesLimit -gt 0) { $args0 += @("--max-packages", "$MaxPackagesLimit") }
         if ($FreshStart) { $args0 += "--fresh-start" }
-        Run-Step -Name "Paso 0: Top 10k por tamaño" -PythonExe $pythonExe -ScriptArgs $args0
-    }
-
-    Run-Step -Name "Paso 1: Filtrar los 5 mil mas populares por descargas" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
-    Run-Step -Name "Paso 2: Construir grafo de dependencias" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
-    Run-Step -Name "Paso 3a: Calcular fan-out" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
-
-    if (-not $SkipFanin) {
-        $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$Workers", "--page-size", "$PageSize")
-        if ($MaxPackages -gt 0) { $args3b += @("--max-packages", "$MaxPackages") }
-        if ($FreshStart) { $args3b += "--fresh-start" }
-        Run-Step -Name "Paso 3b: Calcular fan-in" -PythonExe $pythonExe -ScriptArgs $args3b
+        Run-Step -Name "Extracción de Paquetes Más Pesados" -PythonExe $pythonExe -ScriptArgs $args0
     } else {
-        Write-Host "[skip] Paso 3b omitido (-SkipFanin)." -ForegroundColor Yellow
+        Write-Host "[skip] Extracción de paquetes más pesados omitida (-SkipExtractLargestPackages)." -ForegroundColor Yellow
     }
 
-    Run-Step -Name "Paso 4: Distancia de versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py")
-    Run-Step -Name "Paso 5: Información de paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py")
+    Run-Step -Name "Filtrado de los Paquetes Más Descargados" -PythonExe $pythonExe -ScriptArgs @("pipeline\1_filter_popularity.py")
+    Run-Step -Name "Construcción del Grafo de Dependencias" -PythonExe $pythonExe -ScriptArgs @("pipeline\2_build_graph.py")
+    Run-Step -Name "Cálculo de Fan-out local" -PythonExe $pythonExe -ScriptArgs @("pipeline\3a_calc_fanout.py")
 
-    if (-not $SkipJTMetrics) {
+    if (-not $SkipCalculateGlobalFanIn) {
+        $args3b = @("pipeline\3b_calc_fanin_global.py", "--workers", "$WorkersCount", "--page-size", "$PageSizeLimit")
+        if ($MaxPackagesLimit -gt 0) { $args3b += @("--max-packages", "$MaxPackagesLimit") }
+        if ($FreshStart) { $args3b += "--fresh-start" }
+        Run-Step -Name "Cálculo de Fan-in Global" -PythonExe $pythonExe -ScriptArgs $args3b
+    } else {
+        Write-Host "[skip] Cálculo de Fan-In Global omitido (-SkipCalculateGlobalFanIn)." -ForegroundColor Yellow
+    }
+
+    Run-Step -Name "Cálculo de Distancia de Versiones" -PythonExe $pythonExe -ScriptArgs @("pipeline\4_version_distance.py", "--workers", "$WorkersCount")
+    Run-Step -Name "Recopilación de Metadatos de Paquetes" -PythonExe $pythonExe -ScriptArgs @("pipeline\5_package_info.py", "--workers", "$WorkersCount")
+
+    if (-not $SkipExtractInternalMetrics) {
         $nodeExe = Get-NodeExe
-        Write-Host "\n=== Paso 6: JTMetrics (Node CLI) ===" -ForegroundColor Cyan
-        Write-Host "$nodeExe pipeline\6_apply_jtmetrics.js" -ForegroundColor DarkGray
-        & $nodeExe "pipeline\6_apply_jtmetrics.js"
+        Write-Host "`n=== Extracción de Métricas Internas (JTMetrics) ===" -ForegroundColor Cyan
+        Write-Host "$nodeExe `"pipeline\6_ extract_inner_metrics_jt.js`"" -ForegroundColor DarkGray
+        & $nodeExe "pipeline\6_ extract_inner_metrics_jt.js"
         if ($LASTEXITCODE -ne 0) {
-            throw "Fallo en paso: JTMetrics"
+            throw "Fallo en extracción de métricas internas"
         }
     } else {
-        Write-Host "[skip] Paso 6 omitido (-SkipJTMetrics)." -ForegroundColor Yellow
+        Write-Host "[skip] Extracción de métricas internas omitida (-SkipExtractInternalMetrics)." -ForegroundColor Yellow
     }
 }
 
 $elapsed = (Get-Date) - $startedAt
-Write-Host "\nPipeline finalizado en $($elapsed.ToString())." -ForegroundColor Green
+Write-Host "`nPipeline finalizado en $($elapsed.ToString())." -ForegroundColor Green
