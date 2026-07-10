@@ -1,0 +1,20 @@
+{
+    "classes": {
+        "count": 2818,
+        "mean": 66.02,
+        "median": 0,
+        "stdev": 699.51,
+        "outlier_threshold_3sigma": 2164.55,
+        "outlier_count": 14,
+        "max": 17000
+    },
+    "functions": {
+        "count": 2818,
+        "mean": 456.15,
+        "median": 0,
+        "stdev": 2049.31,
+        "outlier_threshold_3sigma": 6604.09,
+        "outlier_count": 47,
+        "max": 50522
+    }
+}
